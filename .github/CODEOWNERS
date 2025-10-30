@@ -1,1 +1,11 @@
+# Default owners for everything
+*       @devops-team
 
+# Infrastructure changes
+templates/* @infrastructure-team
+
+# Production deployments
+environments/prod/* @release-managers
+
+# Security configurations
+**/security.* @security-team
