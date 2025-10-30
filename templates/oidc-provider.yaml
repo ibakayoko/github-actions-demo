@@ -1,0 +1,37 @@
+# templates/oidc-provider.yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'OIDC Provider for GitHub Actions'
+Parameters:
+  GitHubOrg:
+    Type: String
+  RepositoryName:
+    Type: String
+
+Resources:
+  GithubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: 
+        - sts.amazonaws.com
+
+  GithubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GithubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${RepositoryName}:*
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/PowerUserAccess  # Adjust as needed
+
+Outputs:
+  RoleArn:
+    Description: ARN of created IAM Role
+    Value: !GetAtt GithubActionsRole.Arn
