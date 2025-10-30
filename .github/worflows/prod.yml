@@ -1,0 +1,18 @@
+name: Prod Deployment
+ 
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+     
+jobs:
+ prod-pipeline:
+  uses: ./.github/workflows/deploy.yml
+  with:
+      Environment: prod
+      region: us-east-1
+
+  secrets:
+      role: ${{ secrets.DEPLOYMENT_ROLE }}
