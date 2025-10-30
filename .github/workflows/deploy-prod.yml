@@ -1,0 +1,134 @@
+# .github/workflows/deploy-prod.yml
+name: Deploy to Production
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: ['prod']
+  pull_request_target:
+    types: [closed]
+    branches: ['prod']
+  workflow_dispatch:
+    inputs:
+      deploymentId:
+        description: 'Deployment Request ID'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Validate Templates
+        run: |
+          for template in templates/**/*.yaml; do
+            echo "Validating $template"
+            aws cloudformation validate-template \
+              --template-body file://$template
+          done
+
+  create-deployment-request:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create Deployment Request
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              title: `Production Deployment Request - PR #${context.payload.pull_request.number}`,
+              body: `
+              ## Production Deployment Request
+              
+              PR: #${context.payload.pull_request.number}
+              Branch: prod
+              Author: @${context.payload.pull_request.user.login}
+              
+              ### Required Approvals
+              - [ ] Production Lead
+              - [ ] Security Lead
+              - [ ] Infrastructure Lead
+              
+              ### Deployment Process
+              1. Review the changes in PR #${context.payload.pull_request.number}
+              2. Approve by checking the boxes above
+              3. Comment with \`/approve-deployment\` to trigger deployment
+              
+              ### Change Details
+              ${context.payload.pull_request.body}
+              `
+            });
+
+  deploy:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.title.startsWith('Production Deployment Request') &&
+       github.event.comment.body == '/approve-deployment')
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Verify Approvals
+        if: github.event.comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              issue_number: context.issue.number
+            });
+            
+            if (!issue.data.body.includes('- [x] Production Lead') ||
+                !issue.data.body.includes('- [x] Security Lead') ||
+                !issue.data.body.includes('- [x] Infrastructure Lead')) {
+              throw new Error('Not all required approvals are in place');
+            }
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.PROD_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: us-east-1
+          
+      - name: Deploy to Production
+        run: |
+          ./scripts/deploy.sh \
+            prod \
+            my-stack \
+            templates/main.yaml
+            environments/prod/parameters.json
+
+  create-main-pr:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Create PR to main
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { repo, owner } = context.repo;
+            const prodPRNumber = context.payload.pull_request.number;
+            
+            await github.rest.pulls.create({
+              owner,
+              repo,
+              title: `Sync production changes to main - PR #${prodPRNumber}`,
+              head: 'prod',
+              base: 'main',
+              body: `This PR syncs the changes from production deployment #${prodPRNumber} to the main branch.`
+            });
