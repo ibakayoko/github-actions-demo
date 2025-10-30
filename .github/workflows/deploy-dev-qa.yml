@@ -19,13 +19,20 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Validate Templates
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+      
+      - name: Lint CloudFormation templates
         run: |
-          for template in templates/**/*.yaml; do
-            echo "Validating $template"
-            aws cloudformation validate-template \
-              --template-body file://$template
+          for template in templates/*.{yaml,yml}
+          do
+             if [ -f "$template" ]; then
+              echo "Linting $template..."
+              cfn-lint $template
+            fi
           done
 
   deploy:
