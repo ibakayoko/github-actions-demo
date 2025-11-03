@@ -24,24 +24,25 @@ jobs:
     name: Linting ${{ inputs.Environment }}
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
- 
-    - name: Install cfn-lint
-      run: pip install cfn-lint
- 
-    - name: Lint CloudFormation templates
-      run: |
-          for template in templates/*.{yaml,yml}
-          do
-             if [ -f "$template" ]; then
-              echo "Linting $template..."
-              cfn-lint $template
-            fi
-          done
+      - name: Checkout
+        uses: actions/checkout@v4
+  
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+  
+      - name: Lint CloudFormation templates
+        run: |
+            for template in templates/*.{yaml,yml}
+            do
+              if [ -f "$template" ]; then
+                echo "Linting $template..."
+                cfn-lint $template
+              fi
+            done
  
   create-deployment-request:
       if: github.event.pull_request.merged == true
+      environment:  ${{ inputs.Environment }}
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v3
@@ -78,7 +79,7 @@ jobs:
   deploy-manual:
       if: github.event_name == 'workflow_dispatch'
       runs-on: ubuntu-latest
-      environment: prod
+      environment:  ${{ inputs.Environment }}
       steps:
         - uses: actions/checkout@v4
         
@@ -98,64 +99,65 @@ jobs:
             no-fail-on-empty-changeset: "1"
 
   deploy-approved:
-      if: github.event_name == 'issue_comment' && contains(github.event.issue.title, 'Production Deployment Request') && github.event.comment.body == '/approve-deployment'
-      runs-on: ubuntu-latest
-      environment: prod
-      steps:
-        - uses: actions/checkout@v4
-        
-        - name: Verify Approvals
-          uses: actions/github-script@v6
-          with:
-            script: |
-              const issue = await github.rest.issues.get({
-                owner: context.repo.owner,
-                repo: context.repo.name,
-                issue_number: context.issue.number
-              });
-              
-              if (!issue.data.body.includes('- [x] Production Lead') ||
-                  !issue.data.body.includes('- [x] Security Lead') ||
-                  !issue.data.body.includes('- [x] Infrastructure Lead')) {
-                throw new Error('Not all required approvals are in place');
-              }
-        
-        - name: Configure AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v4
-          with:
-            role-to-assume: ${{ secrets.role }}
-            aws-region: ${{ inputs.region }}
+    if: github.event_name == 'issue_comment' && contains(github.event.issue.title, 'Production Deployment Request') && github.event.comment.body == '/approve-deployment'
+    runs-on: ubuntu-latest
+    environment:  ${{ inputs.Environment }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Verify Approvals
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issue = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.name,
+              issue_number: context.issue.number
+            });
             
-        - name: Deploy to PROD
-          uses: aws-actions/aws-cloudformation-github-deploy@v1
-          with:
-            name: "my-stack-s3-prod"
-            template: ${{ github.workspace }}/templates/main.yml
-            parameter-overrides: file:///${{ github.workspace }}/environments/prod/parameters.json
-            capabilities: CAPABILITY_NAMED_IAM, CAPABILITY_AUTO_EXPAND
-            no-fail-on-empty-changeset: "1"
+            if (!issue.data.body.includes('- [x] Production Lead') ||
+                !issue.data.body.includes('- [x] Security Lead') ||
+                !issue.data.body.includes('- [x] Infrastructure Lead')) {
+              throw new Error('Not all required approvals are in place');
+            }
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.role }}
+          aws-region: ${{ inputs.region }}
+          
+      - name: Deploy to PROD
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: "my-stack-s3-prod"
+          template: ${{ github.workspace }}/templates/main.yml
+          parameter-overrides: file:///${{ github.workspace }}/environments/prod/parameters.json
+          capabilities: CAPABILITY_NAMED_IAM, CAPABILITY_AUTO_EXPAND
+          no-fail-on-empty-changeset: "1"
 
-    create-main-pr:
-      needs: [deploy-manual, deploy-approved]
-      if: always() && (needs.deploy-manual.result == 'success' || needs.deploy-approved.result == 'success')
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
+  create-main-pr:
+    needs: [deploy-manual, deploy-approved]
+    if: always() && (needs.deploy-manual.result == 'success' || needs.deploy-approved.result == 'success')
+    runs-on: ubuntu-latest
+    environment:  ${{ inputs.Environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-        - name: Create PR to main
-          uses: actions/github-script@v6
-          with:
-            script: |
-              const { repo, owner } = context.repo;
-              const prodPRNumber = context.payload.pull_request.number;
-              
-              await github.rest.pulls.create({
-                owner,
-                repo,
-                title: `Sync production changes to main - PR #${prodPRNumber}`,
-                head: 'prod',
-                base: 'main',
-                body: `This PR syncs the changes from production deployment #${prodPRNumber} to the main branch.`
-              });
+      - name: Create PR to main
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { repo, owner } = context.repo;
+            const prodPRNumber = context.payload.pull_request.number;
+            
+            await github.rest.pulls.create({
+              owner,
+              repo,
+              title: `Sync production changes to main - PR #${prodPRNumber}`,
+              head: 'prod',
+              base: 'main',
+              body: `This PR syncs the changes from production deployment #${prodPRNumber} to the main branch.`
+            });
