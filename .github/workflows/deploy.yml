@@ -1,0 +1,65 @@
+on:
+  workflow_call:
+    inputs:
+      Environment:
+        required: true
+        type: string
+      region:
+        required: true
+        type: string    
+         
+    secrets:
+      role:
+        required: true
+ 
+permissions:
+    id-token: write
+    contents: read
+ 
+jobs:
+  linting:
+    if: github.event.pull_request.merged == true
+    environment:  ${{ inputs.Environment }}
+    name: Linting ${{ inputs.Environment }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+ 
+    - name: Install cfn-lint
+      run: pip install cfn-lint
+ 
+    - name: Lint CloudFormation templates
+      run: |
+          for template in templates/*.{yaml,yml}
+          do
+             if [ -f "$template" ]; then
+              echo "Linting $template..."
+              cfn-lint $template
+            fi
+          done
+ 
+  deploy:
+    runs-on: ubuntu-latest
+    environment:  ${{ inputs.Environment }}
+    needs: linting
+    name: Deploy to ${{ inputs.Environment }}
+   
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+ 
+      - name: Configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.role }}
+          aws-region: ${{ inputs.region }}
+          
+      - name: Deploy to AWS CloudFormation
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: "my-stack-s3-${{ inputs.Environment }}"
+          template: ${{ github.workspace }}/templates/main.yml
+          parameter-overrides: file:///${{ github.workspace }}/${{ inputs.Environment }}/parameters.json
+          capabilities: CAPABILITY_NAMED_IAM, CAPABILITY_AUTO_EXPAND
+          no-fail-on-empty-changeset: "1"
