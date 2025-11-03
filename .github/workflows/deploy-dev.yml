@@ -1,0 +1,22 @@
+name: Dev Deployment
+ 
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - dev
+
+permissions:
+    id-token: write
+    contents: read   
+
+jobs:
+    dev-pipeline:
+        uses: ./.github/workflows/deploy-tpl.yml
+        with:
+            Environment: dev
+            region: us-east-1
+        
+        secrets:
+            role: ${{ secrets.DEPLOYMENT_ROLE }}

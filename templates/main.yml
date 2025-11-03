@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: |
-  Sample Cloudformation Template
+  Sample Cloudformation Template to validate
 Parameters:
   Environment:
     Type: String
@@ -30,3 +30,5 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
+
+
