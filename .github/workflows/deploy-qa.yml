@@ -13,7 +13,7 @@ permissions:
     
 jobs:
  qa-pipeline:
-  uses: ./.github/workflows/deploy.yml
+  uses: ./.github/workflows/deploy-tpl.yml
   with:
     Environment: qa
     region: us-east-1
