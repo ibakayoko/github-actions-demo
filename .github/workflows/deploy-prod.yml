@@ -1,5 +1,5 @@
 # .github/workflows/deploy-prod.yml
-name: Deploy to Production
+name: Prod Deployment
 
 on:
   pull_request:
@@ -12,26 +12,36 @@ on:
     inputs:
       deploymentId:
         description: 'Deployment Request ID'
-        required: true
+        required: true 
+  issue_comment:
+    types: [created]
 
 permissions:
   id-token: write
   contents: read
   pull-requests: read
+  issues: write
 
 jobs:
   validate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Validate Templates
+      - name: Checkout
+        uses: actions/checkout@v4
+  
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+  
+      - name: Lint CloudFormation templates
         run: |
-          for template in templates/**/*.yaml; do
-            echo "Validating $template"
-            aws cloudformation validate-template \
-              --template-body file://$template
-          done
+            for template in templates/*.{yaml,yml}
+            do
+              if [ -f "$template" ]; then
+                echo "Linting $template..."
+                cfn-lint $template
+              fi
+            done
 
   create-deployment-request:
     if: github.event.pull_request.merged == true
@@ -39,12 +49,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Create Deployment Request
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const issue = await github.rest.issues.create({
               owner: context.repo.owner,
-              repo: context.repo.name,
+              repo: context.repo.repo,
               title: `Production Deployment Request - PR #${context.payload.pull_request.number}`,
               body: `
               ## Production Deployment Request
@@ -69,23 +79,20 @@ jobs:
             });
 
   deploy:
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.issue.title.startsWith('Production Deployment Request') &&
-       github.event.comment.body == '/approve-deployment')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && contains(github.event.issue.title, 'Production Deployment Request') && github.event.comment.body == '/approve-deployment')
     runs-on: ubuntu-latest
     environment: prod
     steps:
       - uses: actions/checkout@v3
       
       - name: Verify Approvals
-        if: github.event.comment
-        uses: actions/github-script@v6
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
         with:
           script: |
             const issue = await github.rest.issues.get({
               owner: context.repo.owner,
-              repo: context.repo.name,
+              repo: context.repo.repo,
               issue_number: context.issue.number
             });
             
@@ -98,16 +105,18 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.PROD_ACCOUNT_ID }}:role/github-actions-role
+          role-to-assume: ${{ secrets.DEPLOYMENT_ROLE }}
           aws-region: us-east-1
           
       - name: Deploy to Production
-        run: |
-          ./scripts/deploy.sh \
-            prod \
-            my-stack \
-            templates/main.yaml
-            environments/prod/parameters.json
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: "my-stack-s3-prod"
+          template: ${{ github.workspace }}/templates/main.yml
+          parameter-overrides: file:///${{ github.workspace }}/environments/prod/parameters.json
+          capabilities: CAPABILITY_NAMED_IAM, CAPABILITY_AUTO_EXPAND
+          no-fail-on-empty-changeset: "1"
+
 
   create-main-pr:
     needs: deploy
@@ -118,7 +127,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create PR to main
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const { repo, owner } = context.repo;
