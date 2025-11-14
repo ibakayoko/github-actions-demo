@@ -24,7 +24,6 @@ permissions:
 
 jobs:
   validate:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -131,13 +130,13 @@ jobs:
         with:
           script: |
             const { repo, owner } = context.repo;
-            const prodPRNumber = context.payload.pull_request.number;
+            const prodDepId = ${{ github.event.inputs.deploymentId }};
             
             await github.rest.pulls.create({
               owner,
               repo,
-              title: `Sync production changes to main - PR #${prodPRNumber}`,
+              title: `Sync production changes to main - Deployment #${prodDepId}`,
               head: 'prod',
               base: 'main',
-              body: `This PR syncs the changes from production deployment #${prodPRNumber} to the main branch.`
+              body: `This PR syncs the changes from production deployment #${prodDepId} to the main branch.`
             });
