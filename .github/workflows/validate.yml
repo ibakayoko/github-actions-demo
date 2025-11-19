@@ -1,0 +1,27 @@
+# .github/workflows/validate.yml
+name: Validate Templates
+
+on:
+  pull_request:
+    paths:
+      - 'templates/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+      
+      - name: Lint CloudFormation templates
+        run: |
+          for template in templates/*.{yaml,yml}
+          do
+             if [ -f "$template" ]; then
+              echo "Linting $template..."
+              cfn-lint $template
+            fi
+          done
