@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: |
-  Sample Cloudformation Template to validate
+  Sample Cloudformation Template to create S3 bucket with versioning and encryption enabled.
 Parameters:
   Environment:
     Type: String
@@ -30,5 +30,3 @@ Resources:
       Tags:
         - Key: Environment
           Value: !Ref Environment
-
-
