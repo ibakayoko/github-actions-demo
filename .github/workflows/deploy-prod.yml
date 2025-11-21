@@ -2,23 +2,26 @@ name: Prod Deployment
  
 on:
   pull_request:
-    types: [closed]
-    branches: ['main']
-
+    types:
+      - closed
+    branches:
+      - main
+  
   issue_comment:
     types: [created]
-       
+
 permissions:
   id-token: write
   pull-requests: read
   issues: write 
+  contents: read
     
 jobs:
- qa-pipeline:
-  uses: ./.github/workflows/deploy-prod-tpl.yml
-  with:
-    Environment: prod
-    region: us-east-1
- 
-  secrets:
-    role: ${{ secrets.DEPLOYMENT_ROLE }}
+  prod-pipeline:
+    uses: ./.github/workflows/deploy-prod-tpl.yml
+    with:
+      Environment: prod
+      region: us-east-1
+  
+    secrets:
+      role: ${{ secrets.DEPLOYMENT_ROLE }}
