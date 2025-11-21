@@ -116,3 +116,24 @@ jobs:
           parameter-overrides: file:///${{ github.workspace }}/environments/prod/parameters.json
           capabilities: CAPABILITY_NAMED_IAM, CAPABILITY_AUTO_EXPAND
           no-fail-on-empty-changeset: "1"
+     
+      # step to close the issue after successful deployment
+      - name: Close Deployment Request
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '✅ Deployment completed successfully and issue automatically closed.'
+            });
