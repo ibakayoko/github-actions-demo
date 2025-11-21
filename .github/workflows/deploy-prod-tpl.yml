@@ -1,20 +1,23 @@
-# .github/workflows/deploy-prod.yml
-name: Prod Deployment
-
+# .github/workflows/deploy-prod-tpl.yml
 on:
-  pull_request:
-    types: [opened, synchronize]
-    branches: ['main']
-  pull_request_target:
-    types: [closed]
-    branches: ['main']
+  workflow_call:
+    inputs:
+      Environment:
+        required: true
+        type: string
+      region:
+        required: true
+        type: string    
+         
+    secrets:
+      role:
+        required: true
 
-  issue_comment:
-    types: [created]
 
 permissions:
   id-token: write
   pull-requests: read
+  contents: read
   issues: write
 
 jobs:
